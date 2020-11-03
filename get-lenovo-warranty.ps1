@@ -1,11 +1,32 @@
 ﻿Param (
     [String]$FilePath,
     [Int32]$SerialsPerRequest = 100,
-    [String]$ConfigPath = "./lenovo-serial-config.json"
+    [String]$ConfigPath = ".\lenovo-serial-config.json"
 )
 
-# DEBUG
-$FilePath = "./pc kun serial.csv"
+try {
+    [void] [System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms")
+}
+catch {}
+
+Write-Host "###################################################"
+Write-Host "##         Warranty check for Lenovo PCs         ##"
+Write-Host "## https://github.com/vtfk/lenovo-warranty-check ##"
+Write-Host "###################################################"
+Write-Host
+
+Function SecureStringToString($Value)
+{
+    [System.IntPtr] $Bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($value);
+    try
+    {
+        [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($Bstr);
+    }
+    finally
+    {
+        [System.Runtime.InteropServices.Marshal]::FreeBSTR($Bstr);
+    }
+}
 
 $Config = @{}
 
@@ -17,25 +38,31 @@ if (Test-Path $ConfigPath) {
     Write-Host "### First-time setup ###"
     
     $Config = @{
-        ClientID = Read-Host -Prompt "Please input Lenovo Client-ID: " -AsSecureString
+        ClientID = Read-Host -Prompt "Please input Lenovo Client-ID" -AsSecureString
         ApiUri = "https://supportapi.lenovo.com/v2.5/product"
     }
 
-    $ConfigToFile = $Config
+    if ($Config.ClientID.length -lt 1) {
+        Write-Host "Please input a valid key, exiting..."
+        Pause
+        exit 1
+    }
+
+    $ConfigToFile = $Config.PSObject.Copy()
     $ConfigToFile.ClientID = $ConfigToFile.ClientID | ConvertFrom-SecureString
     
     Write-Host "Saving config to `"$ConfigPath`""
-    $Config | ConvertTo-Json | Set-Content -Path $ConfigPath
+    $ConfigToFile | ConvertTo-Json | Set-Content -Path $ConfigPath
 }
 
-Write-Host
-Write-Host "### Input file path ###"
 if (!$FilePath) {
+    Write-Host
+    Write-Host "### Input file path ###"
     try {
         $FileDialog = New-Object -TypeName System.Windows.Forms.OpenFileDialog
         $FileDialog.Title = "Select a Excel document with Lenovo serial numbers..."
-        $FileDialog.Filter = "SpreadSheet (*.xlsx)|*.xlsx"
-        $FileDialog.InitialDirectory = "$PSScriptRoot"
+        $FileDialog.Filter = "SpreadSheet (*.xlsx)|*.xlsx|CSV File (*.csv)|*.csv"
+        $FileDialog.InitialDirectory = "$PWD"
         $FileDialog.ShowDialog()
         Write-Host "Selected: $($FileDialog.FileName)"
         $FilePath = $FileDialog.FileName
@@ -48,13 +75,13 @@ if (!$FilePath) {
 if (!$FilePath) {
     Write-Host "Failed to show the open file dialog, please input the full path to the Excel or CSV file."
     Write-Host "Tip: You can drag the file onto this terminal window."
-    $FilePath = Read-Host -Prompt "Excel/CSV file path: "
+    $FilePath = Read-Host -Prompt "Excel/CSV file path"
     $FilePath = $FilePath -replace "^['`"``]|['`"``]$", ""
-    Write-Host "FP: $FilePath"
 }
 
 if (!$FilePath) {
     Write-Host "Failed to get path, unknown error, exiting.."
+    Pause
     exit 1
 }
 
@@ -72,11 +99,13 @@ try {
     } else {
         Write-Host "Unknown file extension on file `"$FilePath`"!"
         Write-Host "Valid file extensions are `".xlsx`", `".csv`""
+        Pause
         exit 1
     }
 }
 catch {
     Write-Error "Failed to import file `"$FilePath`", exiting...`n"
+    Pause
     exit 1
 }
 
@@ -89,13 +118,15 @@ try {
 }
 catch {
     Write-Error "Couldn't find the `"Serial Number`" column, exiting...`n"
+    Pause
     exit 1
 }
 
 Write-Host
 Write-Host "### Request warranty information ###"
+
 $Headers = @{
-    "ClientID" = $Config.ClientID | ConvertFrom-SecureString -AsPlainText -ErrorAction Stop
+    "ClientID" = SecureStringToString($Config.ClientID)
     "Content-Type" = "application/x-www-form-urlencoded"
 }
 
@@ -129,7 +160,7 @@ $Warranties = For ($i = 0; $i -lt $TotalIterations -and $i -lt 10; $i++) {
 }
 Write-Host "Done! All requests where completed in $($TotalTimeTaken)ms."
 
-$LocalCopyFileName = "$PSScriptRoot\lenovo-data-$(Get-Date -f "yyyy-mm-dd_hh-mm-ss").csv"
+$LocalCopyFileName = "$PWD\lenovo-data-$(Get-Date -f "yyyy-mm-dd_hh-mm-ss").csv"
 Write-Host "Saving a local copy of request data to `"$LocalCopyFileName`""
 $Warranties | Export-Csv "$LocalCopyFileName"
 
@@ -155,9 +186,8 @@ $Formatted = $Warranties | ForEach-Object {
 
 Write-Host
 Write-Host "### Save information ###"
-
 $FileName = $FilePath.Split("/")[-1].Split(".")[0]
-$NewFilePath = "$PSScriptRoot/$FileName-updated.$FileExt"
+$NewFilePath = "$PWD\$FileName-updated.$FileExt"
 
 Write-Host "Saving file to: `"$NewFilePath`""
 if (Test-Path "$NewFilePath") {
