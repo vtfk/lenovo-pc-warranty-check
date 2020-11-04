@@ -168,7 +168,15 @@ $Warranties = For ($i = 0; $i -lt $TotalIterations; $i++) {
 
         $FormattedResponse = $Response | ForEach-Object {
             $IDSplit = $_.ID -split "/"
-            $Warranty = $_.Warranty | Where-Object ID -eq "UCN"  #TODO: UCN may not exist EX. PF0IMTGK
+
+            $LastWarranty = $null
+            $_.Warranty | ForEach-Object {
+                if ($LastWarranty -eq $null) {
+                    $LastWarranty = $_
+                } elseif ($LastWarranty.End -lt $_.End) {
+                    $LastWarranty = $_
+                }
+            }
 
             if (@($IDSplit).length -eq 6) {
                 $PCSerial = $IDSplit[-1]
@@ -186,10 +194,12 @@ $Warranties = For ($i = 0; $i -lt $TotalIterations; $i++) {
                 Name                = $PCName
                 Model               = $PCModel
                 Manufacturer        = "Lenovo"
-                #WarrantyStart      = $Warranty.Start
-                WarrantyEnd         = $Warranty.End
-                #Released           = $_.Released
-                #Purchased          = $_.Purchased
+                "Warranty ID"          = $LastWarranty.ID
+                "Warranty Name"        = $LastWarranty.Name
+                "Warranty Start"      = $Warranty.Start
+                "Warranty End"         = $LastWarranty.End
+                Released           = $_.Released
+                Purchased          = $_.Purchased
             }
         }
 
