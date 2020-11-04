@@ -63,7 +63,7 @@ if (!$FilePath) {
     try {
         $FileDialog = New-Object -TypeName System.Windows.Forms.OpenFileDialog
         $FileDialog.Title = "Select a Excel document with Lenovo serial numbers..."
-        $FileDialog.Filter = "SpreadSheet (*.xlsx)|*.xlsx|CSV File (*.csv)|*.csv"
+        $FileDialog.Filter = "Excel/CSV (*.xlsx, *.csv)|*.xlsx;*.csv|SpreadSheet (*.xlsx)|*.xlsx|CSV File (*.csv)|*.csv"
         $FileDialog.InitialDirectory = "$PWD"
         $FileDialog.ShowDialog()
         Write-Host "Selected: $($FileDialog.FileName)"
@@ -146,8 +146,8 @@ $Headers = @{
 $TotalIterations = [Math]::Ceiling($Serials.length / $SerialsPerRequest)
 $TotalTimeTaken = 0
 
-Write-Host "Requesting information from Lenovo APIs, this can take some time..."
-$Warranties = For ($i = 0; $i -lt $TotalIterations -and $i -lt 5; $i++) {
+Write-Host "Requesting information from Lenovo's API, this can take some time..."
+$Warranties = For ($i = 0; $i -lt $TotalIterations; $i++) {
     try {
         $StartIndex = $i * $SerialsPerRequest
         $EndIndex = $i * $SerialsPerRequest + $SerialsPerRequest - 1
@@ -207,26 +207,27 @@ if ($TestedSerials.length -gt 0) {
 if (@($Serials).length -gt @($Warranties).length) {
     Write-Host
     Write-Host "### Some Invalid Serials ###"
-    Write-Host "Some serials were invalid/not found and was not returned from the API."
-    Write-Host "They are listed in `"$InvalidSerialsPath`""
     $InvalidSerials = ($Serials | Where-Object -FilterScript { $Warranties."Serial Number" -notcontains $_ })
     $InvalidSerials = foreach ($InvalidSerial in $InvalidSerials) {
         [PSCustomObject]@{
             "Serial Number" = $InvalidSerial
         }
     }
+    Write-Host "Some serials ($(@($InvalidSerials).length)) were invalid/not found and was not returned from the API."
+    Write-Host "They are listed in `"$InvalidSerialsPath`""
     $InvalidSerials | Export-Csv -Append -Path $InvalidSerialsPath
 }
 
 Write-Host
-Write-Host "### Save information ###"
-$FileName = $FilePath.Split("/")[-1].Split(".")[0]
+Write-Host "### Save information ###" 
+$FileName = $FilePath.Replace("/", "\").Split("\")[-1].Split(".")[0] 
 $NewFilePath = "$PWD\$FileName-updated.$FileExt"
 
 Write-Host "Saving file to: `"$NewFilePath`""
 if (Test-Path "$NewFilePath") {
     $OverwritePrompt = Read-Host -Prompt "File exists, do you want to overwrite it? (y/N)"
     if ($OverwritePrompt -notmatch "y|yes") {
+        Pause
         exit
     }
 }
@@ -237,4 +238,5 @@ if ($FileExt -eq "xlsx") {
     $Warranties | Export-Csv -Force -Path "$NewFilePath"
 }
 
-Remove-Item -Path $TempFilePath
+#Remove-Item -Path $TempFilePath
+Pause
