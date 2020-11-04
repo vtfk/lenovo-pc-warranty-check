@@ -151,7 +151,7 @@ $Warranties = For ($i = 0; $i -lt $TotalIterations; $i++) {
     try {
         $StartIndex = $i * $SerialsPerRequest
         $EndIndex = $i * $SerialsPerRequest + $SerialsPerRequest - 1
-        
+
         $RequestStart = Get-Date
 
         Write-Progress `
@@ -187,7 +187,7 @@ $Warranties = For ($i = 0; $i -lt $TotalIterations; $i++) {
                 $PCName = "N/A"
                 $PCModel = "Legacy Machine"
             }
-        
+
             [PSCustomObject]@{
                 ID                  = $_.ID
                 "Serial Number"     = $PCSerial
@@ -198,12 +198,10 @@ $Warranties = For ($i = 0; $i -lt $TotalIterations; $i++) {
                 "Warranty Name"        = $LastWarranty.Name
                 "Warranty Start"      = $Warranty.Start
                 "Warranty End"         = $LastWarranty.End
-                Released           = $_.Released
-                Purchased          = $_.Purchased
             }
         }
 
-        $FormattedResponse | Export-CSV -Append -Path $TempFilePath
+        $FormattedResponse | Export-CSV -NoTypeInformation -Append -Path $TempFilePath
 
         $FormattedResponse
     } catch {
@@ -235,7 +233,7 @@ if (@($Serials).length -gt @($Warranties).length) {
     }
     Write-Host "Some serials ($(@($InvalidSerials).length)) were invalid/not found and was not returned from the API."
     Write-Host "They are listed in `"$InvalidSerialsPath`""
-    $InvalidSerials | Export-Csv -Append -Path $InvalidSerialsPath
+    $InvalidSerials | Export-Csv -NoTypeInformation -Append -Path $InvalidSerialsPath
 }
 
 Write-Host
@@ -255,8 +253,8 @@ if (Test-Path "$NewFilePath") {
 if ($FileExt -eq "xlsx") {
     $Warranties | Export-Excel -ClearSheet -Path "$NewFilePath"
 } elseif ($FileExt -eq "csv") {
-    $Warranties | Export-Csv -Force -Path "$NewFilePath"
+    $Warranties | Export-Csv -NoTypeInformation -Force -Path "$NewFilePath"
 }
 
-#Remove-Item -Path $TempFilePath
+Remove-Item -Path $TempFilePath
 Pause
