@@ -169,12 +169,22 @@ $Warranties = For ($i = 0; $i -lt $TotalIterations; $i++) {
         $FormattedResponse = $Response | ForEach-Object {
             $IDSplit = $_.ID -split "/"
             $Warranty = $_.Warranty | Where-Object ID -eq "UCN"  #TODO: UCN may not exist EX. PF0IMTGK
+
+            if (@($IDSplit).length -eq 6) {
+                $PCSerial = $IDSplit[-1]
+                $PCName = $IDSplit[2]
+                $PCModel = $IDSplit[4]
+            } else {
+                $PCSerial = $IDSplit[-1]
+                $PCName = "N/A"
+                $PCModel = "Legacy Machine"
+            }
         
             [PSCustomObject]@{
                 ID                  = $_.ID
-                "Serial Number"     = $IDSplit[-1]
-                Name                = $IDSplit[2]
-                Model               = $IDSplit[4]
+                "Serial Number"     = $PCSerial
+                Name                = $PCName
+                Model               = $PCModel
                 Manufacturer        = "Lenovo"
                 #WarrantyStart      = $Warranty.Start
                 WarrantyEnd         = $Warranty.End
