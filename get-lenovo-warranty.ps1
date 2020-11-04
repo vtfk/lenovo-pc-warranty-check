@@ -1,7 +1,9 @@
 ﻿Param (
     [String]$FilePath,
     [Int32]$SerialsPerRequest = 100,
-    [String]$ConfigPath = ".\lenovo-serial-config.json"
+    [String]$ConfigPath = ".\lenovo-serial-config.json",
+    [String]$TempFilePath = ".\lenovo-serials.tmp.csv",
+    [String]$InvalidSerialsPath = ".\lenovo-serials.invalid.csv"
 )
 
 try {
@@ -109,17 +111,28 @@ catch {
     exit 1
 }
 
-
 try {
     Write-Host "Exracting serial numbers from column `"Serial Number`"..."
-    # TODO: Report if Serial Number is not found
     $Serials = $Computers | Select-Object -ExpandProperty "Serial Number" -ErrorAction Stop
-    Write-Host "Found $(@($Serials).Length) serial numbers"
+    Write-Host "Found $(@($Serials).Length) serial numbers in file"
 }
 catch {
     Write-Error "Couldn't find the `"Serial Number`" column, exiting...`n"
     Pause
     exit 1
+}
+
+$TestedSerials = @()
+if (Test-Path $TempFilePath) {
+    try {
+        $TestedSerials = Import-Csv -Path $TempFilePath
+        Write-Host "Found unfinished job containing $($TestedSerials.length) checked serials.."
+        $Serials = ($Serials | Where-Object -FilterScript { $TestedSerials."Serial Number" -notcontains $_ })
+        Write-Host "Getting info for $($Serials.length) unchecked serials"
+    }
+    catch {
+        Write-Host "Failed to import unfinished job, ignoring.."
+    }
 }
 
 Write-Host
@@ -134,54 +147,75 @@ $TotalIterations = [Math]::Ceiling($Serials.length / $SerialsPerRequest)
 $TotalTimeTaken = 0
 
 Write-Host "Requesting information from Lenovo APIs, this can take some time..."
-$Warranties = For ($i = 0; $i -lt $TotalIterations -and $i -lt 10; $i++) {
-    $StartIndex = $i * $SerialsPerRequest
-    $EndIndex = $i * $SerialsPerRequest + $SerialsPerRequest - 1
+$Warranties = For ($i = 0; $i -lt $TotalIterations -and $i -lt 5; $i++) {
+    try {
+        $StartIndex = $i * $SerialsPerRequest
+        $EndIndex = $i * $SerialsPerRequest + $SerialsPerRequest - 1
+        
+        $RequestStart = Get-Date
 
-    Write-Progress `
-        -PercentComplete ($i / $TotalIterations * 100) `
-        -Activity "Getting warranty information for serials: $($StartIndex + 1) - $($EndIndex + 1)" `
-        -Status "Avg. response time: $([Math]::Round($TotalTimeTaken / ($i + 1)))ms" `
-        -SecondsRemaining ([Math]::Round((($TotalTimeTaken / ($i + 1)) / 1000) * ($TotalIterations - $i)))
-    
-    $Body = @{
-        "Serial" = $Serials[$StartIndex..$EndIndex] -join ","
+        Write-Progress `
+            -PercentComplete ($i / $TotalIterations * 100) `
+            -Activity "Getting warranty information for serials: $($StartIndex + 1) - $($EndIndex + 1)" `
+            -Status "Avg. response time: $([Math]::Round($TotalTimeTaken / ($i + 1)))ms" `
+            -SecondsRemaining ([Math]::Round((($TotalTimeTaken / ($i + 1)) / 1000) * ($TotalIterations - $i)))
+        
+        $Body = @{
+            "Serial" = $Serials[$StartIndex..$EndIndex] -join ","
+        }
+
+        $Response = Invoke-RestMethod -Method POST -Headers $Headers -Uri "$($Config.APIUri)" -Body $Body -ErrorAction Stop
+
+        $FormattedResponse = $Response | ForEach-Object {
+            $IDSplit = $_.ID -split "/"
+            $Warranty = $_.Warranty | Where-Object ID -eq "UCN"  #TODO: UCN may not exist EX. PF0IMTGK
+        
+            [PSCustomObject]@{
+                ID                  = $_.ID
+                "Serial Number"     = $IDSplit[-1]
+                Name                = $IDSplit[2]
+                Model               = $IDSplit[4]
+                Manufacturer        = "Lenovo"
+                #WarrantyStart      = $Warranty.Start
+                WarrantyEnd         = $Warranty.End
+                #Released           = $_.Released
+                #Purchased          = $_.Purchased
+            }
+        }
+
+        $FormattedResponse | Export-CSV -Append -Path $TempFilePath
+
+        $FormattedResponse
+    } catch {
+        Write-Host "ERROR: Failed to get serials between $($StartIndex + 1) - $($EndIndex + 1)"
+        Write-Host "Error message:"
+        Write-Error ($Error[0])
+    } finally {
+        $RequestTime = $(Get-Date) - $RequestStart
+        $RequestMs = [Math]::Round($RequestTime.TotalMilliseconds)
+        $TotalTimeTaken += $RequestMs
     }
-
-    $RequestStart = Get-Date
-
-    $Response = Invoke-RestMethod -Method POST -Headers $Headers -Uri "$($Config.APIUri)" -Body $Body -ErrorAction Stop
-    
-    $RequestTime = $(Get-Date) - $RequestStart
-    $RequestMs = [Math]::Round($RequestTime.TotalMilliseconds)
-    $TotalTimeTaken += $RequestMs
-
-    $Response 
 }
+Write-Host
 Write-Host "Done! All requests where completed in $($TotalTimeTaken)ms."
 
-$LocalCopyFileName = "$PWD\lenovo-data-$(Get-Date -f "yyyy-mm-dd_hh-mm-ss").csv"
-Write-Host "Saving a local copy of request data to `"$LocalCopyFileName`""
-$Warranties | Export-Csv "$LocalCopyFileName"
+if ($TestedSerials.length -gt 0) {
+    Write-Host "Merging unfinished job with this job.."
+    $Warranties = $TestedSerials + $Warranties
+}
 
-#$Warranties = Import-Csv "lenovo-data-2020-30-02_10-30-18.csv"
-
-$Formatted = ""
-$Formatted = $Warranties | ForEach-Object {
-    $IDSplit = $_.ID -split "/"
-    $Warranty = $_.Warranty | Where-Object ID -eq "UCN"  #TODO: UCN may not exist EX. PF0IMTGK
-
-    [PSCustomObject]@{
-        ID             = $_.ID
-        Serial         = $IDSplit[5]
-        Name           = $IDSplit[2]
-        Model          = $IDSplit[4]
-        Manufacturer   = "Lenovo"
-        #WarrantyStart = $Warranty.Start
-        WarrantyEnd    = $Warranty.End
-        #Released      = $_.Released
-        #Purchased     = $_.Purchased
+if (@($Serials).length -gt @($Warranties).length) {
+    Write-Host
+    Write-Host "### Some Invalid Serials ###"
+    Write-Host "Some serials were invalid/not found and was not returned from the API."
+    Write-Host "They are listed in `"$InvalidSerialsPath`""
+    $InvalidSerials = ($Serials | Where-Object -FilterScript { $Warranties."Serial Number" -notcontains $_ })
+    $InvalidSerials = foreach ($InvalidSerial in $InvalidSerials) {
+        [PSCustomObject]@{
+            "Serial Number" = $InvalidSerial
+        }
     }
+    $InvalidSerials | Export-Csv -Append -Path $InvalidSerialsPath
 }
 
 Write-Host
@@ -198,7 +232,9 @@ if (Test-Path "$NewFilePath") {
 }
 
 if ($FileExt -eq "xlsx") {
-    $Formatted | Export-Excel -ClearSheet -Path "$NewFilePath"
+    $Warranties | Export-Excel -ClearSheet -Path "$NewFilePath"
 } elseif ($FileExt -eq "csv") {
-    $Formatted | Export-Csv -Force -Path "$NewFilePath"
+    $Warranties | Export-Csv -Force -Path "$NewFilePath"
 }
+
+Remove-Item -Path $TempFilePath
