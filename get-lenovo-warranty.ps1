@@ -1,6 +1,7 @@
 ﻿Param (
     [String]$FilePath,
     [Int32]$SerialsPerRequest = 100,
+    [Int32]$MaxAttempts = 3,
     [String]$ConfigPath = ".\lenovo-serial-config.json",
     [String]$TempFilePath = ".\lenovo-serials.tmp.csv",
     [String]$InvalidSerialsPath = ".\lenovo-serials.invalid.csv"
@@ -104,6 +105,9 @@ try {
         Pause
         exit 1
     }
+    Write-Host "Found $(@($Computers).length) computers in file"
+    $Computers = $Computers | Where-Object -FilterScript { $_.Model -eq "Lenovo" -or !$_.Model }
+    Write-Host "Filtered to $(@($Computers).length) Lenovo computers"
 }
 catch {
     Write-Error "Failed to import file `"$FilePath`", exiting...`n"
@@ -114,7 +118,6 @@ catch {
 try {
     Write-Host "Exracting serial numbers from column `"Serial Number`"..."
     $Serials = $Computers | Select-Object -ExpandProperty "Serial Number" -ErrorAction Stop
-    Write-Host "Found $(@($Serials).Length) serial numbers in file"
 }
 catch {
     Write-Error "Couldn't find the `"Serial Number`" column, exiting...`n"
@@ -145,21 +148,20 @@ $Headers = @{
 
 $TotalIterations = [Math]::Ceiling($Serials.length / $SerialsPerRequest)
 $TotalTimeTaken = 0
+$FailedAttempts = 0
 
 Write-Host "Requesting information from Lenovo's API, this can take some time..."
 $Warranties = For ($i = 0; $i -lt $TotalIterations; $i++) {
     try {
+        if (($MaxAttempts -ne 0) -and ($FailedAttempts -ge $MaxAttempts)) {
+            Write-Host "The last $FailedAttempts requests has failed, retrying in 30 seconds..."
+            Start-Sleep -Seconds 30
+        }
         $StartIndex = $i * $SerialsPerRequest
         $EndIndex = $i * $SerialsPerRequest + $SerialsPerRequest - 1
 
         $RequestStart = Get-Date
 
-        Write-Progress `
-            -PercentComplete ($i / $TotalIterations * 100) `
-            -Activity "Getting warranty information for serials: $($StartIndex + 1) - $($EndIndex + 1)" `
-            -Status "Avg. response time: $([Math]::Round($TotalTimeTaken / ($i + 1)))ms" `
-            -SecondsRemaining ([Math]::Round((($TotalTimeTaken / ($i + 1)) / 1000) * ($TotalIterations - $i)))
-        
         $Body = @{
             "Serial" = $Serials[$StartIndex..$EndIndex] -join ","
         }
@@ -204,7 +206,10 @@ $Warranties = For ($i = 0; $i -lt $TotalIterations; $i++) {
         $FormattedResponse | Export-CSV -NoTypeInformation -Append -Path $TempFilePath
 
         $FormattedResponse
+        $FailedAttempts = 0
     } catch {
+        $FailedAttempts++
+        Write-Host
         Write-Host "ERROR: Failed to get serials between $($StartIndex + 1) - $($EndIndex + 1)"
         Write-Host "Error message:"
         Write-Error ($Error[0])
@@ -212,6 +217,23 @@ $Warranties = For ($i = 0; $i -lt $TotalIterations; $i++) {
         $RequestTime = $(Get-Date) - $RequestStart
         $RequestMs = [Math]::Round($RequestTime.TotalMilliseconds)
         $TotalTimeTaken += $RequestMs
+        
+        $Progress = $i / $TotalIterations
+        $LengthOfBar = 20
+        $ProgressBarString = (
+            "|" + 
+            ("#" * ($LengthOfBar * $Progress)) + 
+            ("-" * ($LengthOfBar * (1 - $Progress))) +
+            "| " + [Math]::Round($Progress * 100) + "%" + " | " +
+            "Time left: $([Math]::Round((($TotalTimeTaken / ($i + 1)) / 1000) * ($TotalIterations - $i)))s | " +
+            "Serials: $($StartIndex + 1) - $($EndIndex + 1) | " +
+            "Avg. response time: $([Math]::Round($TotalTimeTaken / ($i + 1)))ms"
+        )
+        if ($Progress -ge 1) {
+            $ProgressBarString = $ProgressBarString + "`n"
+        }
+
+        Write-Host -NoNewline ("`r" + $ProgressBarString)
     }
 }
 Write-Host
