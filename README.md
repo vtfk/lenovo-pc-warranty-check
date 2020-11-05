@@ -30,8 +30,9 @@ Or download the latest windows executable from the [Releases](https://github.com
 
 ### First time setup
 1. Double-click the `.exe` or run the `.ps1` script with Powershell.
-2. Enter your Lenovo Client-ID, this is provided by your Lenovo Representative.
-3. Follow one of the following steps
+2. It will check for the required modules, they will most likely not exist. Type "A" when the question to install appears.
+3. Then it asks for your ClientID. Enter your Lenovo Client-ID, this is provided by your Lenovo Representative.
+4. Follow one of the following steps
 
 ### Run with drag'n drop
 > Note: Only supported by the `.exe` file.

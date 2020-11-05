@@ -18,6 +18,20 @@ Write-Host "## https://github.com/vtfk/lenovo-warranty-check ##"
 Write-Host "###################################################"
 Write-Host
 
+Write-Host "Checking for the required modules..."
+$ModulesRequired = @("ImportExcel", "Join-Object")
+$ModulesInstalled = Get-InstalledModule -Name $ModulesRequired -ErrorAction Ignore
+
+if ($ModulesInstalled.length -lt 2) {
+    Write-Host "Installing modules:"
+    Write-Host " - $($ModulesRequired -join "`n - ")"
+    Write-Host
+    Write-Host "Please accept the following questions by typing `"A`". It might take a few seconds.."
+    Write-Host
+
+    Install-Module -Name $ModulesRequired -Scope CurrentUser -ErrorAction Stop
+}
+
 Function SecureStringToString($Value)
 {
     [System.IntPtr] $Bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($value);
