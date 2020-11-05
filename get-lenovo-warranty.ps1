@@ -151,6 +151,7 @@ $TotalTimeTaken = 0
 $FailedAttempts = 0
 
 Write-Host "Requesting information from Lenovo's API, this can take some time..."
+Write-Host -NoNewLine "`r|--------------------| 0% | Time left: N/A | Serials: 1 - 100 | Avg. response time: N/A"
 $Warranties = For ($i = 0; $i -lt $TotalIterations; $i++) {
     try {
         if (($MaxAttempts -ne 0) -and ($FailedAttempts -ge $MaxAttempts)) {
@@ -258,6 +259,26 @@ if (@($Serials).length -gt @($Warranties).length) {
     $InvalidSerials | Export-Csv -NoTypeInformation -Append -Path $InvalidSerialsPath
 }
 
+$MergedWarranties = [PSCustomObject]@{}
+try {
+    Write-Host "### Merging data ###"
+    $MergedWarranties = Join-Object -Left $Computers `
+        -Right $Warranties `
+        -LeftJoinProperty "Serial Number" `
+        -RightJoinProperty "Serial Number" `
+        -Type "AllInLeft" `
+        -ExcludeLeftProperties "Model", "Manufacturer" `
+        -RightProperties "Name", "Model", "Manufacturer", "Warranty End"
+}
+catch {
+    Write-Host "Failed while merging data.."
+    Write-Host "Rerun the script or find the unmerged data in `"$TempFilePath`""
+    Write-Host "Error message:"
+    Write-Error $Error[0]
+    Pause
+    exit 1
+}
+
 Write-Host
 Write-Host "### Save information ###" 
 $FileName = $FilePath.Replace("/", "\").Split("\")[-1].Split(".")[0] 
@@ -273,9 +294,9 @@ if (Test-Path "$NewFilePath") {
 }
 
 if ($FileExt -eq "xlsx") {
-    $Warranties | Export-Excel -ClearSheet -Path "$NewFilePath"
+    $MergedWarranties | Export-Excel -ClearSheet -Path "$NewFilePath"
 } elseif ($FileExt -eq "csv") {
-    $Warranties | Export-Csv -NoTypeInformation -Force -Path "$NewFilePath"
+    $MergedWarranties | Export-Csv -NoTypeInformation -Force -Path "$NewFilePath"
 }
 
 Remove-Item -Path $TempFilePath
