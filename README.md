@@ -25,8 +25,8 @@ Serial Number, Name,                         Model,      Manufacturer, Warranty 
 > Note: The `get-lenovo-warranty.ps1` and `get-lenovo-warranty.exe` is referred to as `.ps1` and `.exe`, respectively.
 
 ### Download
-Either download the [get-lenovo-warranty.ps1](/blob/main/get-lenovo-warranty.ps1) script from this repository.
-Or download the latest windows executable from the [Releases](/releases/latest) page.
+Either download the [get-lenovo-warranty.ps1](/get-lenovo-warranty.ps1) script from this repository.
+Or download the latest windows executable from the [Releases](https://github.com/vtfk/lenovo-pc-warranty-check/releases/latest) page.
 
 ### First time setup
 1. Double-click the `.exe` or run the `.ps1` script with Powershell.
@@ -47,7 +47,7 @@ Or download the latest windows executable from the [Releases](/releases/latest) 
 
     - If not it will ask for a file path in the terminal. Either drop a file on the terminal or manually enter the path.
 3. Now wait for it to finish
-4. When done, it will output the file to `{original-file-name}-updated.xlsx` or `{original-file-name}-updated.csv`. Depending on the input.
+4. When done, it will output the file to `{original-file-name}-updated.xlsx` or `{original-file-name}-updated.csv`, depending on the input.
 
 ## Supported parameters
 | Parameter name | Value/Type | Description |
